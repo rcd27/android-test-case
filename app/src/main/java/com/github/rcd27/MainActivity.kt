@@ -1,7 +1,6 @@
 package com.github.rcd27
 
 import android.os.Bundle
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -10,11 +9,16 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import androidx.viewpager2.widget.ViewPager2
 import com.squareup.picasso.Picasso
+import io.reactivex.android.schedulers.AndroidSchedulers
+import io.reactivex.disposables.CompositeDisposable
+import io.reactivex.schedulers.Schedulers
 import kotlinx.android.synthetic.main.main_activity.*
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
+
+    private val cd = CompositeDisposable()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,36 +40,19 @@ class MainActivity : AppCompatActivity() {
 
         viewPager.setCurrentItem(2, false)
 
-        viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-            var currentPosition: Int = 0
-            val fakeSize = modifiedList.size
+        val pageCallback = PageCallback(modifiedList.size, viewPager)
+        viewPager.registerOnPageChangeCallback(pageCallback)
 
-            override fun onPageScrollStateChanged(state: Int) {
-                if (state == ViewPager2.SCROLL_STATE_IDLE) {
-                    if (currentPosition == 0) {
-                        viewPager.setCurrentItem(fakeSize - 2, false);
-                    } else if (currentPosition == fakeSize - 1) {
-                        viewPager.setCurrentItem(1, false);
-                    }
-                } else if (state == ViewPager2.SCROLL_STATE_DRAGGING && currentPosition == fakeSize) {
-                    //we scroll too fast and miss the state SCROLL_STATE_IDLE for the previous item
-                    viewPager.setCurrentItem(2, false);
-                }
+        pageCallback.pageSelected
+            .subscribeOn(Schedulers.computation())
+            .debounce(100, TimeUnit.MILLISECONDS)
+            .distinctUntilChanged()
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe { position ->
+                // FIXME: position не соответствует правде, потому что там modifiedList
+                header.text = position.toString()
             }
-
-            override fun onPageScrolled(
-                position: Int,
-                positionOffset: Float,
-                positionOffsetPixels: Int
-            ) {
-                // TODO add observable.debounce
-                Log.d("X", "Page scrolled: $position")
-            }
-
-            override fun onPageSelected(position: Int) {
-                currentPosition = position
-            }
-        })
+            .let { cd.add(it) }
     }
 }
 

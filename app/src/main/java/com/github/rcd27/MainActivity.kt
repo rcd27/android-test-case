@@ -10,15 +10,46 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.squareup.picasso.Picasso
+import io.reactivex.Single
 import io.reactivex.android.schedulers.AndroidSchedulers
 import io.reactivex.disposables.CompositeDisposable
 import io.reactivex.schedulers.Schedulers
 import kotlinx.android.synthetic.main.main_activity.*
+import okhttp3.OkHttpClient
+import retrofit2.Retrofit
+import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
+import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.GET
 import java.util.concurrent.TimeUnit
+
+data class JsonDto(
+    val title: String,
+    val url: String
+)
+
+interface Api {
+    @GET("/a_test_1/test_app.json")
+    fun getJson(): Single<List<JsonDto>>
+}
 
 class MainActivity : AppCompatActivity() {
 
     private val cd = CompositeDisposable()
+
+    //region Can be moved to standalone layer, but I was lazy
+    private val okHttpClient = OkHttpClient
+        .Builder()
+        .build()
+
+    private val retrofit = Retrofit.Builder()
+        .baseUrl("https://lovetest.me/")
+        .client(okHttpClient)
+        .addConverterFactory(GsonConverterFactory.create())
+        .addCallAdapterFactory(RxJava2CallAdapterFactory.createWithScheduler(Schedulers.io()))
+        .build()
+
+    private val api = retrofit.create(Api::class.java)
+    //endregion
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,42 +58,40 @@ class MainActivity : AppCompatActivity() {
         val adapter = ViewPagerAdapter()
         viewPager.adapter = adapter
 
-        val trueList = listOf(
-            "https://lovetest.me/a_test_1/test1.png",
-            "https://lovetest.me/a_test_1/test2.png",
-            "https://lovetest.me/a_test_1/test3.png"
-        )
-
-        // FIXME: поломается, если trueListSize == 0
-        val modifiedList = trueList.takeLast(2) + trueList
-
-        adapter.submitList(modifiedList)
-
-        viewPager.setCurrentItem(2, false)
-
-        val pageCallback = PageCallback(modifiedList.size, viewPager)
-        viewPager.registerOnPageChangeCallback(pageCallback)
-
-        pageCallback.pageSelected
-            .subscribeOn(Schedulers.computation())
-            .debounce(100, TimeUnit.MILLISECONDS)
-            .distinctUntilChanged()
+        api.getJson()
+            .subscribeOn(Schedulers.io())
             .observeOn(AndroidSchedulers.mainThread())
-            .subscribe { position ->
-                // FIXME: position не соответствует правде, потому что там modifiedList
-                header.text = position.toString()
+            .subscribe { list ->
+                // FIXME: поломается, если trueListSize == 0
+                val modifiedList = list.takeLast(2) + list
+
+                adapter.submitList(modifiedList)
+
+                viewPager.setCurrentItem(2, false)
+                val pageCallback = PageCallback(modifiedList.size, viewPager)
+                viewPager.registerOnPageChangeCallback(pageCallback)
+
+                pageCallback.pageSelected
+                    .subscribeOn(Schedulers.computation())
+                    .debounce(50, TimeUnit.MILLISECONDS)
+                    .distinctUntilChanged()
+                    .observeOn(AndroidSchedulers.mainThread())
+                    .subscribe { position ->
+                        header.text = modifiedList[position].title
+                    }
+                    ?.let { cd.add(it) }
             }
             .let { cd.add(it) }
     }
 }
 
 class ViewPagerAdapter :
-    ListAdapter<String, ViewPagerHolder>(object : DiffUtil.ItemCallback<String>() {
-        override fun areItemsTheSame(oldItem: String, newItem: String): Boolean {
+    ListAdapter<JsonDto, ViewPagerHolder>(object : DiffUtil.ItemCallback<JsonDto>() {
+        override fun areItemsTheSame(oldItem: JsonDto, newItem: JsonDto): Boolean {
             return oldItem == newItem
         }
 
-        override fun areContentsTheSame(oldItem: String, newItem: String): Boolean {
+        override fun areContentsTheSame(oldItem: JsonDto, newItem: JsonDto): Boolean {
             return oldItem == newItem
         }
     }) {
@@ -81,9 +110,9 @@ class ViewPagerAdapter :
 class ViewPagerHolder(view: View) : RecyclerView.ViewHolder(view) {
     private val imageView = view.findViewById<ImageView>(R.id.imageView)
 
-    fun bind(item: String) {
+    fun bind(item: JsonDto) {
         Picasso.get()
-            .load(item)
+            .load(item.url)
             .error(R.drawable.ic_android_black_24dp)
             .into(imageView)
     }

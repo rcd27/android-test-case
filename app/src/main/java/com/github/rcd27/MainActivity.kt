@@ -7,11 +7,11 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewpager2.widget.ViewPager2
+import com.squareup.picasso.Picasso
 import kotlinx.android.synthetic.main.main_activity.*
 
 class MainActivity : AppCompatActivity() {
@@ -23,16 +23,18 @@ class MainActivity : AppCompatActivity() {
         val adapter = ViewPagerAdapter()
         viewPager.adapter = adapter
 
-        val modifiedList = listOf(
-            "https://lovetest.me/a_test_1/test2.png",
-            "https://lovetest.me/a_test_1/test3.png",
+        val trueList = listOf(
             "https://lovetest.me/a_test_1/test1.png",
             "https://lovetest.me/a_test_1/test2.png",
             "https://lovetest.me/a_test_1/test3.png"
         )
-        adapter.submitList(
-            modifiedList
-        )
+
+        // FIXME: поломается, если trueListSize == 0
+        val modifiedList = trueList.takeLast(2) + trueList
+
+        adapter.submitList(modifiedList)
+
+        viewPager.setCurrentItem(2, false)
 
         viewPager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             var currentPosition: Int = 0
@@ -56,12 +58,12 @@ class MainActivity : AppCompatActivity() {
                 positionOffset: Float,
                 positionOffsetPixels: Int
             ) {
-                Log.d("X","Page scrolled: $position")
+                // TODO add observable.debounce
+                Log.d("X", "Page scrolled: $position")
             }
 
             override fun onPageSelected(position: Int) {
                 currentPosition = position
-                Log.d("X","Page SELECTED: $position")
             }
         })
     }
@@ -89,13 +91,13 @@ class ViewPagerAdapter :
     }
 }
 
-class ViewPagerHolder(private val view: View) : RecyclerView.ViewHolder(view) {
+class ViewPagerHolder(view: View) : RecyclerView.ViewHolder(view) {
     private val imageView = view.findViewById<ImageView>(R.id.imageView)
 
     fun bind(item: String) {
-        // TODO: load real images
-        imageView.setImageDrawable(
-            ContextCompat.getDrawable(view.context, R.drawable.ic_android_black_24dp)
-        )
+        Picasso.get()
+            .load(item)
+            .error(R.drawable.ic_android_black_24dp)
+            .into(imageView)
     }
 }
